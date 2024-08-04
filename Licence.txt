@@ -1,0 +1,2 @@
+This is a fork of https://github.com/Ikerstreamer/RGB-Idle done without permission. Any rights to the original content belong to him.
+To the maximum extent allowable by law I allow others to do with this modified code as they please though most rights probably still legally belong to the original author.
