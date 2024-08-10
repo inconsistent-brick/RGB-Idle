@@ -1,4 +1,5 @@
 type numSerl = {val:number, typ:"num"|"log"}
+
 class num {
     val:number
     typ:"num"|"log"
@@ -42,7 +43,27 @@ class num {
     toJSON():numSerl{
         return {val:this.val, typ:this.typ}
     }
+   
+    gt(other:num|numSerl){
+        if(other.typ===this.typ){
+            return this.val>other.val
+        }
+        
+        if(this.typ==="num"){
+            if(this.val<=0){
+                return false
+            }
+            return Math.log10(this.val)>other.val
+        }else{
+            if(other.val<=0){
+                return true
+            }
+            return this.val>Math.log10(other.val)
+        }
+        
+    }
 }
+
 function deserlNum(v:numSerl){
     return new num(v.val, v.typ)
 }
@@ -54,6 +75,8 @@ function checkHelperIsZero(item:num|number){
     }
     return item.val===0
 }
+
+
 
 /*
 * gets any number and a standard number in the same form for comparison. Doesn't matter if it's both value or both log because we're comparing

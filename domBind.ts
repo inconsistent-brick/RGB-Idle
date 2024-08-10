@@ -37,10 +37,10 @@ function doBinds(game:Game){
         switchTab(game, "Stats", 3)
     }
     /*
+        //TODO what the hell is reduce intended to do?
         getDiv("greenReduce").onclick = function(){
             reduceProd("green")
         }
-        //TODO what the hell is reduce intended to do?
         getDiv("redReduce").onclick = function(){
             reduceProd("red")
         }
@@ -78,7 +78,7 @@ function doBinds(game:Game){
     }
     
     for(let i=0; i<21; i++){
-        getDiv("spectrumButton15"+i).onclick = function(){
+        getDiv("spectrumButton"+i).onclick = function(){
             buyUpgrade(game, "spectrum", i)
         }
     }
@@ -96,11 +96,21 @@ function doBinds(game:Game){
         CalcSRgain(game)
     }
     
+    const popupDivs = Array.from(document.getElementsByClassName("popup"))
+    if(popupDivs.length!==4){
+        throw Error("unexpected count of popdivs")
+    }
     const returns={
         unlockBtn: getDiv("unlockBtn"),
         spectrumReset: getDiv("spectrumReset"),
         potencyBtn: getDiv("potencyBtn"),
-        mixButton: getDiv("mixButton")
+        mixButton: getDiv("mixButton"),
+        popupDivs: {
+            prismRise:popupDivs[0] as HTMLDivElement,
+            limit:popupDivs[1] as HTMLDivElement,
+            saveCopy:popupDivs[2] as HTMLDivElement,
+            progressFinish:popupDivs[3] as HTMLDivElement
+        }
     }
     returns.unlockBtn.onclick=function(){
         unlockBlue(game.player, game.domBindings)
@@ -121,7 +131,7 @@ function doBinds(game:Game){
             }
         }
     }
-    getElement("prismUpgradeCost").onclick = function(){
+    getElement("costReset").onclick = function(){
         prismUpgrade(game, "cost")
     }
 
@@ -129,7 +139,7 @@ function doBinds(game:Game){
         save(game.player)
     }
     getElement("onclickflip").onclick=function(){flip(game, "fast")}
-    getElement("onclickExport").onclick=function(){save(game.player, "Export")}
+    getElement("onclickExport").onclick=function(){exportSave(game)}
     getElement("onclickFlipFps").onclick=function(){flip(game, "fps")}
     getElement("onclickimport").onclick=function(){loadImport()}
     getElement("onclickreset").onclick=function(){reset(game, 0)}
@@ -137,4 +147,4 @@ function doBinds(game:Game){
     return returns
 }
 
-type DomBindigns = ReturnType<typeof doBinds>
+type DomBindings = ReturnType<typeof doBinds>

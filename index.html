@@ -3,12 +3,11 @@
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <link rel="stylesheet" type="text/css" href="interface.css" />
-    <script type="text/javascript" src="main.js"></script>
-    <script type="text/javascript" src="logmath.js"></script>
+    <script type="text/javascript" src="output/bundle.js"></script>
     <meta charset="utf-8" />
     <title>RGB Idle</title>
 </head>
-<body onload="init()">
+<body>
     <!-- TODO: some of these bindings are invalid now need to find a good careful way to fix this-->
     <div class="popup">The prism rises as you approach it, so many question you want it to answer yet it hovers there dead silent. You stick your hand out to reach for it and as you do all the light around you seems to fade. The blackness of the prism seems to consume everything, your spectrum fades out of exsistence.<br> The game is about to change, your 3 colored bars will no longer solely produce red, green and blue respectively. Now each bars production can be altered to produce a certain amount of the base 3 colors, your first prism mix is fixed.<br> Click here to proceed or Press 'esc' to cancel</div>
     <div class="popup">You have reached the limit of the amount of colors your computer can process. You can now alter these color to become unstable yet allow you further growth.<br> Each unstable color will halve autobuyer interval.<br>Click here to proceed</div>
@@ -163,7 +162,7 @@
                         <div class="button " style="background:white; text-shadow:none; color:black;height:100%;text-align:center" id="specbarblue">Make spectrum bar! Costs 10 potency</div>
                     </div>
                     <br />
-                    <div class="button hidden" id="costReset" style="background:black; text-shadow:none; color:white;text-align:center;width:40%;margin:25px; border:groove;" id="prismUpgradeCost"><span>Reconfigure the prism to increase the maximum black it can process. </span><br><br> <span style="font-size:0.75em;" id="blackCostInfo">You are now ready to move on to a better prism! Pressing this button will reset you back to 1st prism, however you will retain log2(spectrum).</span></div>
+                    <div class="button hidden" id="costReset" style="background:black; text-shadow:none; color:white;text-align:center;width:40%;margin:25px; border:groove;"><span>Reconfigure the prism to increase the maximum black it can process. </span><br><br> <span style="font-size:0.75em;" id="blackCostInfo">You are now ready to move on to a better prism! Pressing this button will reset you back to 1st prism, however you will retain log2(spectrum).</span></div>
                 </div>
             </div>
             <div id="tabProgress" class="tab">

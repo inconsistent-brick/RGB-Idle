@@ -1,10 +1,9 @@
+//TODO errors should probably be really obvious and in people's face
 const v = 1.12;
-type RGBName = "red"|"green"|"blue"
 const BAR_KEYS:Array<"red"|"green"|"blue"> = ["red", "green", "blue"]
 const PLAYER_MONEY_KEYS:Array<"red"|"green"|"blue"> = BAR_KEYS
 
 type ZEROType = 0|num
-type SealizedNum = {val:number, type:"num"|"log"}|number
 interface ResetPlayer{
     version: typeof v,
     money:{red:ZEROType, green:ZEROType, blue:ZEROType},
@@ -28,7 +27,7 @@ interface ResetPlayer{
         cost: number,
    },
    specbar: { red: boolean, green: boolean, blue: boolean},
-   black: ZEROType,
+   black: num,
    AB:{ red: boolean, green: boolean, blue: boolean },
    CM:number,
    progress:Array<number>,
@@ -59,7 +58,7 @@ const resetplayer:ResetPlayer = {
          cost: 0,
     },
     specbar: { red: false, green: false, blue: false},
-    black: 0,
+    black: new num(0),
     AB: { red: true, green: true, blue: true },
     CM: 1,
     progress: [],
@@ -80,11 +79,11 @@ function savePlayer(player:InitPlayer){
     })
 }
 function loadPlayer(data:string):InitPlayer{
-    return JSON.parse(data, function(key, value){
+    const player = JSON.parse(data, function(key, value){
         if(typeof value==="object" && Object.keys(value).length===2){//TODO not sure if this instanceof check is required or not
             if(!(value instanceof num) && value.typ && typeof value.val==="number"){
                 return deserlNum(value)
-            }else if(!(value instanceof bar) && value.width && Array.isArray(value.color) && value.color.length===3){
+            }else if(!(value instanceof bar) && (typeof (value as barJSON).width==="number" || (value as barJSON).width instanceof num) && Array.isArray((value as barJSON).color) && (value as barJSON).color.length===3){
                 const v = value as barJSON
                 if(key==="red"||key==="green"||key==="blue"){
                     const nb = new bar(key, v.color[0], v.color[1], v.color[2], key+"Bar")
@@ -95,6 +94,10 @@ function loadPlayer(data:string):InitPlayer{
         }
         return value
     })
+    if(!validate(player, PlayerValidator)){
+        throw Error("failure to load player")
+    }
+    return player
 }
 
 
@@ -195,7 +198,7 @@ class Game{
     colorBar:boolean|undefined;
 
     player:InitPlayer
-    domBindings:DomBindigns
+    domBindings:DomBindings
 
     mainLoop:number
     ABLoop:number
@@ -218,7 +221,7 @@ class Game{
                 }
                 player.AB = { red: true, green: true, blue: true };
                 player.CM = 1;
-                player.black = 0;
+                player.black = new num(0);
                 player.progress = [];
                 player.potencyEff = { red: 1 / 256, green: 1 / 256, blue: 1 / 256 };
                 player.prism = {
@@ -286,6 +289,7 @@ class Game{
                  document.getElementById("advSpectrumReset")!.classList.add("hidden");
             }
             (document.getElementById("advSpectrumReset")!.childNodes[1].childNodes[0] as HTMLInputElement).value = (player.advSpec.multi satisfies number) + ""
+            this.player = player
             updateStats(this);
             CalcSRgain(this);
             SUInfo((document.getElementById("spectrumButton" + 4)!.childNodes[1] as HTMLElement), this, 4);
@@ -328,9 +332,10 @@ class Game{
         for (let i = 0; i < BAR_KEYS.length ; i++){
             player.bars[BAR_KEYS[i]].draw(this, 0);
         }
-        this.autoSave = setInterval(save, 3000);
+        this.autoSave = setInterval(()=>save(this.player), 30000);
         this.mainLoop = setInterval(()=>this.gameLoop(), 1000 / player.options.fps);
         this.ABLoop = setInterval(()=>this.autoBuyer(), 10);
+        setupKeyListeners(this)
 
     }
     destroy(){
@@ -397,7 +402,7 @@ class Game{
             document.getElementById("tabSpectrum")!.children[1].classList.add("hidden");
             document.getElementById("tabSpectrum")!.children[3].classList.remove("hidden");
         }
-        if (Log.get(player.black, "l") > 128 && SumOf(player.spectrumLevel) === 9) {
+        if (player.black.gt({val:128, typ:"log"}) && SumOf(player.spectrumLevel) === 9) {
             (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[5].classList.remove("hidden");
             for (var i = 15; i < 18; i++){
                 player.spectrumLevel[i] = 0;
@@ -756,7 +761,7 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
         case 1:
             if (player.prism.active && !player.progress.includes(1)) {
                 player.progress.push(1);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 2:
@@ -764,13 +769,13 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
                 player.progress.push(2);
                 player.advSpec.unlock = true;
                 document.getElementById("advSpectrumReset")!.classList.remove("hidden");
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 3:
             if (!player.progress.includes(3) && Log.get(player.black, "log") >= 50) {
                 player.progress.push(3);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 4:
@@ -780,43 +785,43 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
                 document.getElementById("spectrumButton" + 5)!.children[0].innerHTML = "Auto Buy Max Green Level Every " + 0.25 + "s";
                 document.getElementById("spectrumButton" + 9)!.children[0].innerHTML = "Auto Buy Max Blue Upgrades Every " + 0.25 + "s";
                 game.ABInt = { red: 2000 / 8, green: 2000 / 8, blue: 2000 / 8 };
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 5:
             if (Math.floor(Log.get(player.spliced.red, "l")) === 128 && Math.floor(Log.get(player.spliced.green, "l")) == 128 && Math.floor(Log.get(player.spliced.blue, "l")) == 128 && !player.progress.includes(5)) {
                 player.progress.push(5);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 6:
             if (Log.get(player.money.blue, "l") >= 64 && player.level.blue[3] === 0 && !player.progress.includes(6)) {
                 player.progress.push(6);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 7:
             if (!player.progress.includes(7)) {
                 player.progress.push(7);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 8:
             if (player.bars.red.color[0] == 255 && player.bars.green.color[1] == 255 && player.bars.blue.color[2] == 255 && !player.progress.includes(8)) {
                 player.progress.push(8);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 9:
             if (Log.get(Log.div(player.previousSpectrums[0].amount, (player.previousSpectrums[0].time / 1000)), "num") as number >= 1000000 && !player.progress.includes(9)) {
                 player.progress.push(9);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 10:
             if (!player.progress.includes(10)) {
                 if (game.p10 === 9) {
-                    pop(game, 3);
+                    pop(game, game.domBindings.popupDivs.progressFinish);
                     player.progress.push(10);
                 } else {
                     let names = ["red","green","blue"];
@@ -857,44 +862,44 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
                 }
                 if (Log.get(w, "l") > Log.get(b, "l")) {
                     player.progress.push(11);
-                    pop(game, 3);
+                    pop(game, game.domBindings.popupDivs.progressFinish);
                 }
             }
             return
         case 12:
             if (!player.progress.includes(12) && Log.get(player.money.green, "n") === 0 && player.level.green === 0 && player.level.red >= 1000) {
                 player.progress.push(12);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 13:
             if (!player.progress.includes(13) && Log.get(player.black, "l") >= 256) {
                 player.progress.push(13);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 14:
             if (!player.progress.includes(14) && player.specbar.red && player.specbar.green && player.specbar.blue) {
                 player.progress.push(14);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 15:
             if (!player.progress.includes(15) && player.prism.cost > 0) {
                 player.progress.push(15);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 16:
             if (!player.progress.includes(16) && player.specced >= 10000) {
                 player.progress.push(16);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
         case 17:
             if (!player.progress.includes(17) && player.advSpec.time >= 3.6e6) {
                 player.progress.push(17);
-                pop(game, 3);
+                pop(game, game.domBindings.popupDivs.progressFinish);
             }
     }          
 }
@@ -985,7 +990,7 @@ function prismUpgrade(game:Game, type:"cost"|"specbar"|"potency"|"add"|"sub", na
             if (SumOf(player.bars.red.color) + SumOf(player.bars.green.color) + SumOf(player.bars.blue.color) === 255 * 9) {
                 reset(game, 1);
                 player.spectrum = Log.log(player.spectrum, 2);
-                player.black = 0;
+                player.black = new num(0);
                 player.prism = { active: true, potency: { points: 0, total: 0, red: -1, green: -1, blue: -1 }, specbar: { red: false, green: false, blue: false }, potencyEff: { red: 1 / 256, green: 1 / 256, blue: 1 / 256 }, cost: player.prism.cost + 1 };
                 player.potencyEff = { red: 1 / 256, green: 1 / 256, blue: 1 / 256 };
                 player.specbar = { red: false, green: false, blue: false };
@@ -1183,7 +1188,7 @@ function SUInfo(element:Element, game:Game, num:number):void{
     }
 }
 
-function updateStats(game:Game) {
+function updateStats(game:Game) { //TODO ew wire this in a sane manner All of these are chached derived values
     const player = game.player
     game.PD = player.spectrumLevel[10] == 1 ? 0.5 : 1;
     if (player.spectrumLevel[2] == 1) {
@@ -1195,10 +1200,10 @@ function updateStats(game:Game) {
     }
     if (player.spectrumLevel[16] == 1){
         game.IB = Log.multi(game.IR, game.IG);
-    }
-    else{
+    }else{
         game.IB = 8;
-    }if (player.spectrumLevel[17] == 1){
+    }
+    if (player.spectrumLevel[17] == 1){
         game.BPD = Log.floor(Log.root(Log.div(Log.add(player.level.red, player.level.green), 100), 1.75))
     }else{
         game.BPD = 0;
@@ -1384,7 +1389,7 @@ function formatNum(player:InitPlayer, num:number|num|string, dp?:number, type?:"
     }
 }
 
-function unlockBlue(player:InitPlayer, domBindings:DomBindigns) {
+function unlockBlue(player:InitPlayer, domBindings:DomBindings) {
     if (Log.get(player.money.green,"n") as number >= 50) {
         player.money.green = Log.sub(player.money.green,50);
         player.unlock = true;
@@ -1393,16 +1398,17 @@ function unlockBlue(player:InitPlayer, domBindings:DomBindigns) {
     }
 }
 
-function save(player:InitPlayer, name?:"Export"|"reset") {
-    if (name === "Export"){
-        setTimeout(pop,10,2);
-        let temp = document.createElement("textarea");
-        temp.value = btoa(savePlayer(player));
-        document.getElementById("tabSettings")!.appendChild(temp);
-        temp.select()
-        document.execCommand("copy")//TODO: depricated method of putting stuff on clipboard, this is probably too much access to ask for?
-        temp.parentNode!.removeChild(temp);
-    }
+function exportSave(game:Game){
+    let temp = document.createElement("textarea");
+    temp.value = btoa(savePlayer(game.player));
+    document.getElementById("tabSettings")!.appendChild(temp);
+    temp.select()
+    document.execCommand("copy")//TODO: depricated method of putting stuff on clipboard, this is probably too much access to ask for?
+    temp.parentNode!.removeChild(temp);
+    pop(game, game.domBindings.popupDivs.saveCopy)
+}
+
+function save(player:InitPlayer, name?:"reset") {
     if (name === "reset"){
         localStorage.setItem("RGBsave", btoa(savePlayer(player)));
     }
@@ -1421,19 +1427,23 @@ function loadImport(){
     const temp = prompt("Enter your save:", "");
     if (temp) {
         try {
+            if(!validate(loadPlayer(atob(temp)), PlayerValidator)){
+                throw Error("failure to load player")
+            }
             if (typeof (loadPlayer(atob(temp))) === "object") {
                 localStorage.setItem("RGBsave", temp);
                 document.location.reload();
             }
         } catch (e) {
-            console.error("Invalid save file!");
+            alert("Invalid save file!")
         }
     }
 }
 
 function load() {
     if (localStorage.getItem("RGBsave") !== null) {
-        let temp = loadPlayer(atob(localStorage.getItem("RGBsave") ?? "null"));
+        const saveValue = localStorage.getItem("RGBsave")
+        let temp = loadPlayer(saveValue?atob(saveValue):"null");
         let names = ["red" as const,"green"  as const ,"blue"  as const];
         for (let i = 0; i < 3; i++){
             let barWidth = temp.bars[names[i]].width
@@ -1548,7 +1558,7 @@ function mix(game:Game, PC?:unknown) {
     const player = game.player
     if (!player.prism.active) {
         if (PC == undefined) {
-            setTimeout(pop, 10, 0);
+            //pop(game, 10); //FIXME what message was this indended to be
             return;
         } else {
             if (PC) {
@@ -1705,17 +1715,27 @@ function ToggleAB(game:Game, name:"all"|"red"|"green"|"blue"){//toggles auto buy
     SUInfo((document.getElementById("spectrumButton" + 9)!.childNodes[1] as HTMLElement), game, 9);
 }
 
-function pop(game:Game, num:number) {
-    (document.getElementsByClassName("popup")[num] as HTMLDivElement).style.visibility = "visible";
+function pop(game:Game, div:HTMLElement) {
+    div.style.visibility = "visible";
     document.body.onmousemove = function (event) {
-        (document.getElementsByClassName("popup")[num] as HTMLDivElement).style.top = event.clientY + "px";
-        (document.getElementsByClassName("popup")[num] as HTMLDivElement).style.left ="calc(" + event.clientX + "px - 12.5%)";
+        div.style.top = event.clientY + "px";
+        div.style.left ="calc(" + event.clientX + "px - 12.5%)";
     };
-    setTimeout(function(){document.body.onclick = function () {
-        (document.getElementsByClassName("popup")[num] as HTMLDivElement).style.visibility = "hidden";
-        if (num == 0) {
+    let open = true
+    function close(){
+        if(!open){
+            return
+        }
+        open = false
+        if(closeTimeout!==null){
+            window.clearTimeout(closeTimeout)
+        }
+        window.removeEventListener("keydown", handleEsc);
+
+        div.style.visibility = "hidden";
+        if(div === game.domBindings.popupDivs.prismRise){//TODO this is very very weird
             mix(game, true);
-        } else if (num == 1) {
+        }else if(div === game.domBindings.popupDivs.limit){//TODO this is very very weird
             throw Error("code path would hit undefined method reduceProd")
             //reduceProd("red");
             //reduceProd("green");
@@ -1724,16 +1744,17 @@ function pop(game:Game, num:number) {
         }
         document.body.onclick = null;
         document.body.onmousemove = null;
-        window.removeEventListener("keydown", handleEsc);
+        window.removeEventListener("keydown", handleEsc);        
     }
+    let closeTimeout:null|number = setTimeout(function(){
+        document.body.onclick = function () { 
+            close()
+        }
     },200)
     function handleEsc(event:KeyboardEvent) {
         let key = event.keyCode || event.which;
-        if (key === 27 && num === 0) {
-            document.body.onclick = null;
-            document.body.onmousemove = null;
-            (document.getElementsByClassName("popup")[num] as HTMLDivElement).style.visibility = "hidden";
-            window.removeEventListener("keydown", handleEsc);
+        if (key === 27) {
+            close()
         }
     }
     window.addEventListener("keydown",handleEsc)
@@ -1961,7 +1982,7 @@ function getBlack(game:Game, name:"red"|"green"|"blue", time:number|num, prod:nu
     let blackThreshold = 1e100;
     let ret = Log.root(Log.add(Log.div(Log.multi(Log.multi(mults, time), Log.add(Log.multi(specprod, time), Log.multi(2, spectrum))),blackThreshold), Log.pow(player.black, A)), A);
     if (Log.get(ret, "l") < -2){
-        return 0;
+        return new num(0);
     }
     return ret;
 }
@@ -1995,3 +2016,12 @@ function getColorPotency(player:InitPlayer, name:"red"|"green"|"blue", color:num
 }
 
 
+if(document.readyState==="complete"){
+    init()
+}else{
+    document.onreadystatechange = function(){
+        if(document.readyState==="complete"){
+            init()
+        }
+    }
+}
