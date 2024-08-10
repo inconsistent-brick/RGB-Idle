@@ -62,6 +62,16 @@ class num {
         }
         
     }
+
+    div(other:num|number){
+        return Log.div(this, other)
+    }
+    add(other:num|number){
+        return Log.add(this, other)
+    }
+    multi(other:num|number){
+        return Log.multi(this, other)
+    }
 }
 
 function deserlNum(v:numSerl){

@@ -15,6 +15,9 @@ function getElementWithTag(id:string, tag:string):HTMLElement{
 function getDiv(id:string):HTMLDivElement{
     return getElementWithTag(id, "DIV") as HTMLDivElement
 }
+function getSpan(id:string):HTMLSpanElement{
+    return getElementWithTag(id, "SPAN") as HTMLSpanElement
+}
 function getRangeInput(id:string):HTMLInputElement{
     const element = getElementWithTag(id, "INPUT") as HTMLInputElement
     if((element as HTMLInputElement).type!=="range"){
@@ -22,6 +25,9 @@ function getRangeInput(id:string):HTMLInputElement{
     }
     
     return element as HTMLInputElement
+}
+function getTable(id:string){
+    return getElementWithTag(id, "TBODY") as HTMLTableSectionElement
 }
 function doBinds(game:Game){
     getDiv("rgbSwitchTab").onclick= function(){
@@ -56,16 +62,16 @@ function doBinds(game:Game){
         buyUpgrade(game, "red")
     }
     getDiv("blueButton0").onclick = function(){
-        buyUpgrade(game, "blue", 0)
+        buyBlueUpgrade(game, 0)
     }
     getDiv("blueButton1").onclick = function(){
-        buyUpgrade(game, "blue", 1)
+        buyBlueUpgrade(game, 1)
     }
     getDiv("blueButton2").onclick = function(){
-        buyUpgrade(game, "blue", 2)
+        buyBlueUpgrade(game, 2)
     }
     getDiv("blueButton3").onclick = function(){
-        buyUpgrade(game, "blue", 3)
+        buyBlueUpgrade(game, 3)
     }
     getDiv("redSplice").onclick=function(){
         spliceColor(game, "red")
@@ -79,7 +85,7 @@ function doBinds(game:Game){
     
     for(let i=0; i<21; i++){
         getDiv("spectrumButton"+i).onclick = function(){
-            buyUpgrade(game, "spectrum", i)
+            buySpectrumUpgrade(game, i)
         }
     }
     getDiv("subtabUpgrades").onclick=function(){
@@ -110,10 +116,27 @@ function doBinds(game:Game){
             limit:popupDivs[1] as HTMLDivElement,
             saveCopy:popupDivs[2] as HTMLDivElement,
             progressFinish:popupDivs[3] as HTMLDivElement
-        }
+        },
+        blueDiv: getDiv("blueDiv"),
+        tabSettings: getDiv("tabSettings"),
+        blackCountRGB: getDiv("blackCountRGB"),
+        newupgrades: getDiv("newupgrades"),
+        spectrumCountRGB: getDiv("spectrumCountRGB"),
+        advSpectrumReset:getDiv("advSpectrumReset"),
+        spectrumDiv:getDiv("spectrumDiv"),
+        blackCount:getDiv("blackCount"),
+        potencydiv:getDiv("potencydiv"),
+        specpot:getDiv("specpot"),
+        costReset:getDiv("costReset"),
+        blackCostInfo:getSpan("blackCostInfo"),
+        spectrumCount:getDiv("spectrumCount"),
+        specstat:getDiv("specstat"),
+        timestat:getDiv("timestat"),
+        achieves:getTable("achieves"),
+        spectrumUpgradesTable:getTable("spectrumUpgradesTable")
     }
     returns.unlockBtn.onclick=function(){
-        unlockBlue(game.player, game.domBindings)
+        unlockBlue(game, game.domBindings)
     }
     returns.spectrumReset.onclick = function(){
         reset(game, 1)

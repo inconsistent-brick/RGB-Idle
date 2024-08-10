@@ -1,4 +1,6 @@
 //TODO errors should probably be really obvious and in people's face
+//TODO no more get.... bindings need to be explicit
+//Some data bindings. Things need to listen on other things. not get updated in some massive game loop.
 const v = 1.12;
 const BAR_KEYS:Array<"red"|"green"|"blue"> = ["red", "green", "blue"]
 const PLAYER_MONEY_KEYS:Array<"red"|"green"|"blue"> = BAR_KEYS
@@ -8,7 +10,7 @@ interface ResetPlayer{
     version: typeof v,
     money:{red:ZEROType, green:ZEROType, blue:ZEROType},
     level: { red: number, green: number, blue: [number,number,number,number]},
-    unlock: boolean,
+    unlock: boolean, //is blue unlocked?
     spliced: { red: number|num, green: number|num, blue: number|num },
     spectrum: ZEROType,
     specced: number,
@@ -67,40 +69,6 @@ const resetplayer:ResetPlayer = {
 }
 
 
-function savePlayer(player:InitPlayer){
-    return JSON.stringify(player, function(_, value){
-        if(value instanceof num || value instanceof bar){
-            return value.toJSON()
-        }
-        if(value instanceof Game){
-            throw Error()
-        }
-        return value
-    })
-}
-function loadPlayer(data:string):InitPlayer{
-    const player = JSON.parse(data, function(key, value){
-        if(typeof value==="object" && Object.keys(value).length===2){//TODO not sure if this instanceof check is required or not
-            if(!(value instanceof num) && value.typ && typeof value.val==="number"){
-                return deserlNum(value)
-            }else if(!(value instanceof bar) && (typeof (value as barJSON).width==="number" || (value as barJSON).width instanceof num) && Array.isArray((value as barJSON).color) && (value as barJSON).color.length===3){
-                const v = value as barJSON
-                if(key==="red"||key==="green"||key==="blue"){
-                    const nb = new bar(key, v.color[0], v.color[1], v.color[2], key+"Bar")
-                    nb.width = v.width
-                    return nb
-                }
-            }
-        }
-        return value
-    })
-    if(!validate(player, PlayerValidator)){
-        throw Error("failure to load player")
-    }
-    return player
-}
-
-
 
 type barJSON = {
     width:number|num,
@@ -111,7 +79,6 @@ class bar{
     name:"red"|"green"|"blue"
     color:[number, number, number]
     width:number|num
-    mouse:number
     constructor(n:"red"|"green"|"blue",r:number,g:number,b:number,elemid:string){
         this.name = n;
         this.color = [r, g, b];
@@ -121,46 +88,45 @@ class bar{
             throw Error("failure to init bar with id "+elemid)
         }
         this.element = element
-        this.mouse = 0;    
     }
-    draw(game:Game, dif:number) {
+    draw(game:Game) { // diff is time in miliseconds since last update
         const player = game.player
-        if (this.mouse == 1) {
-            player.CM += 5 * (dif / 1000);
-            increase(game, Log.multi(Log.multi(game.click, 50), (dif / 1000)),dif);
-        } else if (this.name == "red" && player.CM > 1 && player.spectrumLevel[3] === 0) {
-            player.CM -= 7.5 * (dif / 1000);
-            player.CM = Math.max(player.CM, 1);
+
+        let income = game.auto.div(1000 / player.options.fps).add(game.barsHeld ? game.click : 0).multi(game.IR) //TODO this desision makes no sense it's only vaugely based on how fast the bar is incrementing I think it's intended to be if income/frame>32
+
+        if(this.name==="green"){
+            income = income.multi(game.IG).div(256)
+        }else if(this.name==="blue"){
+            income = income.multi(game.IG).multi(game.IB).div(65536)
         }
-        let getParm1
-        if(this.name==="red"){
-            getParm1 = Log.multi(
-                Log.add(Log.div(game.auto, 1000 / player.options.fps), (player.bars.red.mouse === 1 ? game.click : 0)), game.IR)
-        }else if(this.name==="green"){
-            getParm1 = Log.div(Log.multi(Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), (player.bars.red.mouse === 1 ? game.click : 0)), game.IR), game.IG), 256)
-        }else{
-            getParm1 = Log.div(Log.multi(Log.multi(Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), (player.bars.red.mouse === 1 ? game.click : 0)), game.IR), game.IG), game.IB), 65536)
-        }
-        if (Log.get(getParm1, "log") > Math.log10(32)){
+        
+        
+        if (Log.get(income, "log") > Math.log10(32)){
             this.element.style.width = "100%";
         }
         else{
-            this.element.style.width = Log.get(Log.div(this.width,2.56),"num") + "%";
+            this.element.style.width = Log.get(Log.div(this.width,2.56),"num") + "%"; // value/max value converted to %
         }
         this.element.style.background = RGBstring(this.color);
     }
     setup(game:Game) {
-        const temp = this.name;
         const partentNode = this.element.parentElement
         if(partentNode===null){
             throw Error("failure to init par parent")
         }
-        partentNode.onmousedown = function () { press(game, temp, 1) };
-        partentNode.onmouseup = function () { press(game, temp, 0) };
-        partentNode.onmouseleave = function () { press(game,temp, 0) };
-        partentNode.ontouchstart = function () { press(game,temp, 1) };
-        (partentNode as any).ontouchstop = function () { press(game,temp, 0) };
-        partentNode.ontouchcancel = function () { press(game,temp, 0) };
+        function barHold(){
+            game.barsHeld = true
+        }
+        function barRelease(){
+            game.barsHeld = false   
+        }
+        partentNode.onmousedown = barHold;
+        partentNode.onmouseup = barRelease;
+        partentNode.onmouseleave = barRelease;
+
+        partentNode.ontouchstart = barHold;
+        (partentNode as any).ontouchstop = barRelease;
+        partentNode.ontouchcancel = barRelease
     }
     toJSON(){
         return { width: this.width, color: this.color }
@@ -178,12 +144,12 @@ class Game{
 
     tab:"RGB"|"Spectrum"|"Settings"|"Stats"|"Upgrades" = "RGB";
     subtab = {spectrum:"Upgrades" as const}
-    price = { red: 5 as number|num, green: 5  as number|num, blue: [0 as 0|num, 0 as 0|num, 0 as 0|num, 0 as 0|num] };
+    price = { red: 5 as number|num, green: 5  as number|num, blue: [0 as 0|num, 0 as 0|num, 0 as 0|num, 0 as 0|num] }; //prices to upgrade red/green/blue basic upgrades
     income = {red:0 as 0|num, green:0 as 0|num, blue: 0 as 0|num};
     click:number|num = 5;
-    auto:number|num = 0;
+    auto:num = new num(0);
     IG:num|0 = 0;
-    IR:num|0 = 0;
+    IR:num|0 = 0; //amount red money is incremented for each full bar I think
     IB:number|num = 8;
     RSS = 0;
     PD = 0;
@@ -203,14 +169,17 @@ class Game{
     mainLoop:number
     ABLoop:number
     autoSave:number
+    barsHeld:boolean
     constructor(){
+        this.barsHeld = false
         let player = {
             ...resetplayer,
             bars:{ red: new bar("red", 255, 0, 0, "redBar"), green: new bar("green", 0, 255, 0, "greenBar"), blue: new bar("blue", 0, 0, 255, "blueBar") }
         }
         player.bars.red.setup(this);
         let loadedSave = load();
-        this.domBindings = doBinds(this)
+        const domBindings = doBinds(this)
+        this.domBindings = domBindings
         if (loadedSave != false) {
             if (loadedSave.version >= 1){
                  player = Object.assign(player, loadedSave)
@@ -248,56 +217,55 @@ class Game{
                 player.spectrumLevel.push(-1);
             }
             if (player.unlock){
-                document.getElementById("blueDiv")!.classList.remove("hidden");
+                domBindings.blueDiv.classList.remove("hidden");
             }
             else{
-                document.getElementById("blueDiv")!.classList.add("hidden");
+                domBindings.blueDiv.classList.add("hidden");
             }
             if (SumOf(player.spectrumLevel) >= 9){
                 document.getElementsByClassName("switch")[5].classList.remove("hidden");
             }
             if (player.prism.active){
-                document.getElementById("newupgrades")!.classList.remove("hidden");
-            }
-            else{
-                document.getElementById("newupgrades")!.classList.add("hidden");
+                this.domBindings.newupgrades.classList.remove("hidden");
+            }else{
+                this.domBindings.newupgrades.classList.add("hidden");
             }
             if (SumOf(player.spectrumLevel) >= 12) {
-                (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[5].classList.remove("hidden");
-                document.getElementById("newupgrades")!.classList.add("hidden")
+                this.domBindings.spectrumUpgradesTable.rows[5].classList.remove("hidden");
+                this.domBindings.newupgrades.classList.add("hidden")
             } else {
-                (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[5].classList.add("hidden");
+                this.domBindings.spectrumUpgradesTable.rows[5].classList.add("hidden");
             }
             if (player.prism.cost > 0){
-                (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[6].classList.remove("hidden");
+                this.domBindings.spectrumUpgradesTable.rows[6].classList.remove("hidden");
             }else{
-                (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[6].classList.add("hidden");
+                this.domBindings.spectrumUpgradesTable.rows[6].classList.add("hidden");
             }
             if (player.prism.active){
-                document.getElementById("blackCountRGB")!.classList.remove("hidden");
+                this.domBindings.blackCountRGB.classList.remove("hidden");
             }else{
-                document.getElementById("blackCountRGB")!.classList.add("hidden");
+                this.domBindings.blackCountRGB.classList.add("hidden");
             }
             if (player.specced > 0){
-                document.getElementById("spectrumCountRGB")!.classList.remove("hidden");
+                domBindings.spectrumCountRGB.classList.remove("hidden");
             }else{
-                document.getElementById("spectrumCountRGB")!.classList.add("hidden");
+                domBindings.spectrumCountRGB.classList.add("hidden");
             }
             if (player.advSpec.unlock){
-                document.getElementById("advSpectrumReset")!.classList.remove("hidden");
+                domBindings.advSpectrumReset.classList.remove("hidden");
             }else{
-                 document.getElementById("advSpectrumReset")!.classList.add("hidden");
+                domBindings.advSpectrumReset.classList.add("hidden");
             }
             (document.getElementById("advSpectrumReset")!.childNodes[1].childNodes[0] as HTMLInputElement).value = (player.advSpec.multi satisfies number) + ""
             this.player = player
             updateStats(this);
             CalcSRgain(this);
-            SUInfo((document.getElementById("spectrumButton" + 4)!.childNodes[1] as HTMLElement), this, 4);
-            SUInfo((document.getElementById("spectrumButton" + 5)!.childNodes[1] as HTMLElement), this, 5);
-            SUInfo((document.getElementById("spectrumButton" + 9)!.childNodes[1] as HTMLElement), this, 9);
-            (document.getElementById("spectrumButton" + 4)!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Red Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
-            (document.getElementById("spectrumButton" + 5)!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Green Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
-            (document.getElementById("spectrumButton" + 9)!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Blue Upgrades Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
+            SUInfo((document.getElementById("spectrumButton4")!.childNodes[1] as HTMLElement), this, 4);
+            SUInfo((document.getElementById("spectrumButton5")!.childNodes[1] as HTMLElement), this, 5);
+            SUInfo((document.getElementById("spectrumButton9")!.childNodes[1] as HTMLElement), this, 9);
+            (document.getElementById("spectrumButton4")!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Red Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
+            (document.getElementById("spectrumButton5")!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Green Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
+            (document.getElementById("spectrumButton9")!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Blue Upgrades Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
             this.ABInt = { red: 2000 / (player.progress.includes(4) ? 8 : 1), green: 2000 / (player.progress.includes(4) ? 8 : 1), blue: 2000 / (player.progress.includes(4) ? 8 : 1)};
             player.CM = Math.max(player.CM, 1);
             const dom = this.domBindings
@@ -330,7 +298,7 @@ class Game{
         player.version = v;
         this.player = player
         for (let i = 0; i < BAR_KEYS.length ; i++){
-            player.bars[BAR_KEYS[i]].draw(this, 0);
+            player.bars[BAR_KEYS[i]].draw(this);
         }
         this.autoSave = setInterval(()=>save(this.player), 30000);
         this.mainLoop = setInterval(()=>this.gameLoop(), 1000 / player.options.fps);
@@ -361,7 +329,7 @@ class Game{
         }
         if (player.spectrumLevel[9] == 1 && player.AB.blue && this.ABcount % this.ABInt.blue < 10){
             for (var i = 0; i < 4; i++){
-                while (buyUpgrade(this, "blue", i)){
+                while (buyBlueUpgrade(this, i)){
                     //TODO this do nothing is dangerious 
                 }
             }
@@ -378,8 +346,17 @@ class Game{
         }
         updateStats(this)
         increase(this, Log.multi(this.auto, (dif / 1000)), dif);
-        for (let i = 0; i < BAR_KEYS.length ; i++){
-            player.bars[BAR_KEYS[i]].draw(this, dif);
+        
+        if (this.barsHeld) { //increase for hold and update combo multiplier for hold
+            player.CM += 5 * (dif / 1000);
+            increase(this, Log.multi(Log.multi(this.click, 50), (dif / 1000)), dif);
+        } else if (player.CM > 1 && player.spectrumLevel[3] === 0) {  //decrease Combo multipler for release
+            player.CM -= 7.5 * (dif / 1000);
+            player.CM = Math.max(player.CM, 1);
+        }
+
+        for (let i = 0; i < BAR_KEYS.length; i++){
+            player.bars[BAR_KEYS[i]].draw(this);
         }
         if (player.level.green >= 1 && !player.unlock){
             this.domBindings.unlockBtn.classList.remove("hidden");
@@ -391,7 +368,7 @@ class Game{
             document.getElementsByClassName("switch")[6].classList.remove("hidden");
         }
         if (player.level.blue[3] >= 1){
-            document.getElementById("spectrumDiv")!.classList.remove("hidden");
+            this.domBindings.spectrumDiv.classList.remove("hidden");
         }
         if (Log.gte(player.money.blue, 1)){
              document.getElementsByClassName("switch")[1].classList.remove("hidden");
@@ -407,7 +384,7 @@ class Game{
             for (var i = 15; i < 18; i++){
                 player.spectrumLevel[i] = 0;
             }
-            document.getElementById("newupgrades")!.classList.add("hidden");
+            this.domBindings.newupgrades.classList.add("hidden");
         } 
         render[this.tab](this);
         if (this.tab == "Spectrum"){
@@ -470,30 +447,24 @@ function init() {
 }
 
 
-
-
-
-
-
-
 const render = {
     Prism: function (game:Game) {
         const player = game.player
-        document.getElementById("blackCount")!.innerHTML = "You have " + formatNum(player, player.black) + " Blackness";
+        game.domBindings.blackCount.innerHTML = "You have " + formatNum(player, player.black) + " Blackness";
         game.mixCost = 1;
         game.blackBar = false;
         game.colorBar = false;
         if (player.prism.active && player.progress.includes(1)){
-            document.getElementById("potencydiv")!.classList.remove("hidden");
+            game.domBindings.potencydiv.classList.remove("hidden");
         }
         if (player.spectrumLevel[15] === 1){
-            document.getElementById("specpot")!.classList.remove("hidden");
+            game.domBindings.specpot.classList.remove("hidden");
         }
         if (player.specbar.red || player.specbar.green || player.specbar.blue){
-             document.getElementById("costReset")!.classList.remove("hidden");
+             game.domBindings.costReset.classList.remove("hidden");
         }
         else{
-            document.getElementById("costReset")!.classList.add("hidden");
+            game.domBindings.costReset.classList.add("hidden");
         }
         function suffix(num:number) {
             let ret:number|string = num;
@@ -510,16 +481,16 @@ const render = {
         }
         if (SumOf(player.bars.red.color) + SumOf(player.bars.green.color) + SumOf(player.bars.blue.color) === 255 * 9) {
             if (player.prism.cost === 0){
-                document.getElementById("blackCostInfo")!.innerHTML = "You are now ready to move on to a better prism! Pressing this button will reset you back to 1st prism, however you will retain log2(spectrum).";
+                game.domBindings.blackCostInfo.innerHTML = "You are now ready to move on to a better prism! Pressing this button will reset you back to 1st prism, however you will retain log2(spectrum).";
             }
             else{
-                document.getElementById("blackCostInfo")!.innerHTML = "Destroy your prism for the " + suffix(player.prism.cost + 1) + " time and move forth to an even greater one! Pressing this button will reset you back to 1st prism, however you will retain log2(spectrum).";
+                game.domBindings.blackCostInfo.innerHTML = "Destroy your prism for the " + suffix(player.prism.cost + 1) + " time and move forth to an even greater one! Pressing this button will reset you back to 1st prism, however you will retain log2(spectrum).";
             }
-            document.getElementById("costReset")!.style.borderColor = "white";
-            document.getElementById("costReset")!.style.borderWidth = "5";
+            game.domBindings.costReset.style.borderColor = "white";
+            game.domBindings.costReset.style.borderWidth = "5";
         } else {
-            document.getElementById("blackCostInfo")!.innerHTML = "Before you may destroy your " + suffix(player.prism.cost + 1) + " prism you must first conquer it using the power of the light. Get all bars to be completly white to fully overpower the darkness within the prism.";
-            document.getElementById("costReset")!.style.borderColor = "black";
+            game.domBindings.blackCostInfo.innerHTML = "Before you may destroy your " + suffix(player.prism.cost + 1) + " prism you must first conquer it using the power of the light. Get all bars to be completly white to fully overpower the darkness within the prism.";
+            game.domBindings.costReset.style.borderColor = "black";
         }
         for (var i = 0; i < 3; i++) {
             let temp = BAR_KEYS[i];
@@ -605,8 +576,12 @@ const render = {
                 SUInfo(document.getElementById("spectrumButton" + i)!.children[1], game, i);
             }
             document.getElementById("spectrumButton" + i)!.children[2].innerHTML = "Price: " + formatNum(player, game.SpecPrice[i], 0) + " Spectrum ";
-            if (player.spectrumLevel[i] == 1) document.getElementById("spectrumButton" + i)!.classList.add("bought");
-            else document.getElementById("spectrumButton" + i)!.classList.remove("bought");
+            if (player.spectrumLevel[i] === 1){
+                document.getElementById("spectrumButton" + i)!.classList.add("bought");
+            }
+            else {
+                document.getElementById("spectrumButton" + i)!.classList.remove("bought");
+            }
         }
     },
     RGB : function (game:Game) {
@@ -628,9 +603,9 @@ const render = {
             document.getElementById(tempKey + "Count")!.innerHTML = formatNum(player, player.money[tempKey]);
             if (
                 Log.get(
-                    (tempKey == "red" ? Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), player.bars.red.mouse === 1 ? game.click : 0), game.IR) :
-                    (tempKey == "green" ? Log.div(Log.multi(Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), player.bars.red.mouse === 1 ? game.click : 0), game.IR), game.IG), 256) :
-                    Log.div(Log.multi(Log.multi(Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), player.bars.red.mouse === 1 ? game.click : 0), game.IR), game.IG), game.IB), 65536))
+                    (tempKey == "red" ? Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), game.barsHeld ? game.click : 0), game.IR) :
+                    (tempKey == "green" ? Log.div(Log.multi(Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), game.barsHeld ? game.click : 0), game.IR), game.IG), 256) :
+                    Log.div(Log.multi(Log.multi(Log.multi(Log.add(Log.div(game.auto, 1000 / player.options.fps), game.barsHeld ? game.click : 0), game.IR), game.IG), game.IB), 65536))
                 ), "log") > Math.log10(32)
             ){
                 game.incomeBarDisplay(tempKey);
@@ -689,8 +664,8 @@ const render = {
                     (document.getElementById(tempKey + "Button")!.childNodes[1] as HTMLElement).innerHTML = "Level: " + formatNum(player, player.level[tempKey], 0);
             }
         }
-        document.getElementById("spectrumCountRGB")!.innerHTML = formatNum(player, player.spectrum, 0) + " Spectrum";
-        document.getElementById("blackCountRGB")!.innerHTML = formatNum(player, player.black) + " Black";
+        game.domBindings.blackCountRGB.innerHTML = formatNum(player, player.spectrum, 0) + " Spectrum";
+        game.domBindings.blackCountRGB.innerHTML = formatNum(player, player.black) + " Black";
         for (let i = 0; i < 3; i++) {
             for (let j = 0; j < 5; j += 2){
                 ((document.getElementById(PLAYER_MONEY_KEYS[i] + "Prism") as HTMLTableRowElement).cells[2].childNodes[j] as HTMLInputElement).value = (player.bars[PLAYER_MONEY_KEYS[i]].color[j / 2] satisfies number) + "";
@@ -699,7 +674,7 @@ const render = {
     },
     Spectrum: function (game:Game) {
         const player = game.player
-        document.getElementById("spectrumCount")!.innerHTML = "You have " + formatNum(player, player.spectrum, 0) + " Spectrum";
+        game.domBindings.spectrumCount.innerHTML = "You have " + formatNum(player, player.spectrum, 0) + " Spectrum";
     },
     Settings: function (game:Game) {
         const player = game.player
@@ -716,10 +691,10 @@ const render = {
             }
         }
         if (player.progress.includes(16)){
-            document.getElementById("specstat")!.innerHTML = "Times specced is  currently " + formatNum(player, player.specced, 0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100, 2) +"x and your spectrum bar gain by " +formatNum(player, Math.sqrt(player.specced),2)+"x.";
+            game.domBindings.specstat.innerHTML = "Times specced is  currently " + formatNum(player, player.specced, 0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100, 2) +"x and your spectrum bar gain by " +formatNum(player, Math.sqrt(player.specced),2)+"x.";
         }
         else{
-            document.getElementById("specstat")!.innerHTML = "Times specced is  currently " + formatNum(player, player.specced,0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100,2) + "x.";
+            game.domBindings.specstat.innerHTML = "Times specced is  currently " + formatNum(player, player.specced,0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100,2) + "x.";
         }
         let ret = "You have wasted " + formatTime(player.wastedTime + player.sleepingTime) + " playing this broken game.<br>"; //TODO replace broken with fixed eventually
         if (player.sleepingTime < 60000){
@@ -738,11 +713,11 @@ const render = {
              ret += "How is this possible you have been online for the same amount of minutes you've been offline. This is an anomally!";
         }
         ret += "<br> Time online: " + formatTime(player.wastedTime) + "<br> Time offline: "+ formatTime(player.sleepingTime);
-        document.getElementById("timestat")!.innerHTML = ret;
+        game.domBindings.timestat.innerHTML = ret;
     },
     Progress: function (game:Game) {
         const player = game.player
-        const rows = (document.getElementById("achieves") as HTMLTableElement).rows;
+        const rows = game.domBindings.achieves.rows;
         for (let i = 0; i < 14; i++){
              rows[i].style.backgroundColor = "";
         }
@@ -768,7 +743,7 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
             if (!player.progress.includes(2) && !player.advSpec.unlock) {
                 player.progress.push(2);
                 player.advSpec.unlock = true;
-                document.getElementById("advSpectrumReset")!.classList.remove("hidden");
+                game.domBindings.advSpectrumReset.classList.remove("hidden");
                 pop(game, game.domBindings.popupDivs.progressFinish);
             }
             return
@@ -781,9 +756,9 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
         case 4:
             if (game.p3 && Log.get(player.black,"l") >= 3 && !player.progress.includes(4)) {
                 player.progress.push(4);
-                document.getElementById("spectrumButton" + 4)!.children[0].innerHTML = "Auto Buy Max Red Level Every " + 0.25 + "s";
-                document.getElementById("spectrumButton" + 5)!.children[0].innerHTML = "Auto Buy Max Green Level Every " + 0.25 + "s";
-                document.getElementById("spectrumButton" + 9)!.children[0].innerHTML = "Auto Buy Max Blue Upgrades Every " + 0.25 + "s";
+                document.getElementById("spectrumButton4")!.children[0].innerHTML = "Auto Buy Max Red Level Every " + 0.25 + "s";
+                document.getElementById("spectrumButton5")!.children[0].innerHTML = "Auto Buy Max Green Level Every " + 0.25 + "s";
+                document.getElementById("spectrumButton9")!.children[0].innerHTML = "Auto Buy Max Blue Upgrades Every " + 0.25 + "s";
                 game.ABInt = { red: 2000 / 8, green: 2000 / 8, blue: 2000 / 8 };
                 pop(game, game.domBindings.popupDivs.progressFinish);
             }
@@ -902,11 +877,6 @@ function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
                 pop(game, game.domBindings.popupDivs.progressFinish);
             }
     }          
-}
-
-function press(game:Game, _:unknown, num:number) {
-    const player = game.player
-    player.bars.red.mouse = num;
 }
 
 function increase(game:Game, amnt:num|number, dif:num|number) {
@@ -1061,57 +1031,57 @@ function prismUpgrade(game:Game, type:"cost"|"specbar"|"potency"|"add"|"sub", na
     }
 }
 
-function buyUpgrade(game:Game, name:"spectrum"|"blue"|"red"|"green", Bindex?:number) {
+function buySpectrumUpgrade(game:Game, Bindex:number) {
     const player = game.player
-    if (name === "spectrum") {
-        if(typeof Bindex!=="number"){
-            throw Error("no index")
+    if (Log.get(player.spectrum,"log") as number >= Math.log10(game.SpecPrice[Bindex]) && player.spectrumLevel[Bindex] < 1) {
+        if(Bindex === 6) {
+            player.unlock = true;
+            game.domBindings.blueDiv.classList.remove("hidden");
         }
-        if (Log.get(player.spectrum,"log") as number >= Math.log10(game.SpecPrice[Bindex]) && player.spectrumLevel[Bindex] < 1) {
-            if(Bindex === 6) {
-                player.unlock = true;
-                document.getElementById("blueDiv")!.classList.remove("hidden");
-            }
-            if (Bindex === 5 || Bindex === 4 || Bindex === 9) {
-                SUInfo((document.getElementById("spectrumButton" + Bindex)!.childNodes[1] as HTMLElement), game, Bindex);
-            }
-            player.spectrum = Log.sub(player.spectrum, game.SpecPrice[Bindex]);
-            player.spectrumLevel[Bindex]++;
-            updateStats(game);
-            return true;
+        if (Bindex === 5 || Bindex === 4 || Bindex === 9) {
+            SUInfo((document.getElementById("spectrumButton" + Bindex)!.childNodes[1] as HTMLElement), game, Bindex);
         }
-    } else if (name === "blue") {
-        if(typeof Bindex!=="number"){
-            throw Error("no index")
-        }
-        if (Log.get(player.money[name], "log") >= Log.get(game.price[name][Bindex], "log")) {
-            player.money[name] = Log.sub(player.money[name], game.price[name][Bindex])
-            player.level[name][Bindex]++;
-            updateStats(game);
-            if (Bindex == 3 && player.progress.includes(6)){
-                CalcSRgain(game);
-            }
-            return true;
-        }
-    } else {
-        if (Log.get(player.money[name], "log") >= Log.get(game.price[name], "log")) {
-            player.money[name] = Log.sub(player.money[name], game.price[name])
-            player.level[name]++;
-            updateStats(game);
-            if (player.level[name] % 100 === 0){
-                CalcSRgain(game);
-            }
-            return true;
-        } else if (player.spectrumLevel[20] === 1 && Log.get(player.black, "log") >= Log.get(game.price[name], "log")) {
-            player.black = Log.sub(player.black, game.price[name])
-            player.level[name]++;
-            updateStats(game);
-            if (player.level[name] % 100 === 0){
-                 CalcSRgain(game);
-            }
-            return true;
-        }
+        player.spectrum = Log.sub(player.spectrum, game.SpecPrice[Bindex]);
+        player.spectrumLevel[Bindex]++;
+        updateStats(game);
+        return true;
     }
+}
+function buyBlueUpgrade(game:Game, Bindex:number){
+    const player = game.player
+    const name = "blue"
+    if (Log.get(player.money[name], "log") >= Log.get(game.price[name][Bindex], "log")) {
+        player.money[name] = Log.sub(player.money[name], game.price[name][Bindex])
+        player.level[name][Bindex]++;
+        updateStats(game);
+        if (Bindex == 3 && player.progress.includes(6)){
+            CalcSRgain(game);
+        }
+        return true;
+    }
+    return false
+}
+function buyUpgrade(game:Game, name:"red"|"green") {
+    const player = game.player
+    
+    if (Log.get(player.money[name], "log") >= Log.get(game.price[name], "log")) {
+        player.money[name] = Log.sub(player.money[name], game.price[name])
+        player.level[name]++;
+        updateStats(game);
+        if (player.level[name] % 100 === 0){
+            CalcSRgain(game);
+        }
+        return true;
+    } else if (player.spectrumLevel[20] === 1 && Log.get(player.black, "log") >= Log.get(game.price[name], "log")) {
+        player.black = Log.sub(player.black, game.price[name])
+        player.level[name]++;
+        updateStats(game);
+        if (player.level[name] % 100 === 0){
+                CalcSRgain(game);
+        }
+        return true;
+    }
+
 }
 
 function SUABInfo(element:Element, game:Game, color:"red"|"green"|"blue"){
@@ -1132,7 +1102,7 @@ function SUABInfo(element:Element, game:Game, color:"red"|"green"|"blue"){
 
 }
 //I think this stands for spectrum upgrade info
-function SUInfo(element:Element, game:Game, num:number):void{
+function SUInfo(element:Element, game:Game, num:number):void{ //TODO this ONLY consists of a switch statement
     const player = game.player
     switch(num){
         case 0:
@@ -1192,7 +1162,7 @@ function updateStats(game:Game) { //TODO ew wire this in a sane manner All of th
     const player = game.player
     game.PD = player.spectrumLevel[10] == 1 ? 0.5 : 1;
     if (player.spectrumLevel[2] == 1) {
-        game.IR =  Log.multi(Log.add(4, Log.multi(4, player.level.blue[1])),(player.spectrumLevel[7] == 1 ? Log.max(Log.multi(2,Log.ceil(Log.div(player.level.blue[1],10))),1) : 1));
+        game.IR = Log.multi(Log.add(4, Log.multi(4, player.level.blue[1])),(player.spectrumLevel[7] == 1 ? Log.max(Log.multi(2,Log.ceil(Log.div(player.level.blue[1],10))),1) : 1));
         game.IG = Log.multi(Log.add(4, Log.multi(4, player.level.blue[2])),(player.spectrumLevel[7] == 1 ? Log.max(Log.multi(2,Log.ceil(Log.div(player.level.blue[2],10))),1) : 1));
     } else {
         game.IR = Log.multi(Log.add(2, Log.multi(2, player.level.blue[1])), (player.spectrumLevel[7] == 1 ? Log.max(Log.multi(2, Log.ceil(Log.div(player.level.blue[1], 10))), 1) : 1));
@@ -1208,7 +1178,7 @@ function updateStats(game:Game) { //TODO ew wire this in a sane manner All of th
     }else{
         game.BPD = 0;
     }
-    game.Cores = Log.multi(Log.pow(2, player.level.blue[3]), (player.spectrumLevel[14] == 1 ? 8 : 1));
+    game.Cores = Log.multi(Log.pow(2, player.level.blue[3]), (player.spectrumLevel[14] === 1 ? 8 : 1));
     game.Clock = Log.pow(2, Log.floor(Log.log(Log.pow(Log.add(2 , Log.log(game.Cores,6)), Log.add(player.level.blue[0], (player.progress.includes(7) ? Math.min(Math.floor(player.spectrumTimer / 360000), 10) : 0))), 2)));
     game.click = Log.multi(Log.multi(Log.add(2,Log.div(player.level.red, 2)), Log.pow((1.15 + player.spectrumLevel[8] * 0.15), Log.floor(Log.div(player.level.red, 10)))), Math.log10(Math.max(player.CM,1)));
     game.auto = Log.multi(Log.multi(Log.multi(Log.multi(Log.multi(Log.multi(Log.multi(player.level.green, 16), Log.pow(Log.add(1.15 ,Log.multi( player.spectrumLevel[8], 0.15)), Log.floor(Log.div(player.level.green, 10)))), game.Clock),(player.spectrumLevel[0] == 1 ? Math.max(Math.log10(player.CM), 1) : 1)), (player.spectrumLevel[11] == 1 ? player.level.red : 1)), (player.spectrumLevel[12] == 1 ? Log.max(Log.floor(player.spectrum), 1) : 1)),player.progress.includes(10) ? Log.max(Log.log10(player.black),1):1);
@@ -1218,7 +1188,7 @@ function updateStats(game:Game) { //TODO ew wire this in a sane manner All of th
     game.price.blue[1] = Log.multi(4, Log.pow(2, Log.max(Log.sub(player.level.blue[1],game.BPD),0)));
     game.price.blue[2] = Log.multi(8, Log.pow(2, Log.max(Log.sub(player.level.blue[2],game.BPD),0)));
     game.price.blue[3] = Log.multi(1048576, Log.pow(Log.pow(512, Log.max(Log.floor(Log.multi(Log.max(Log.sub(player.level.blue[3], 4), 0),Log.add(1.25,Log.multi(Log.max(Log.sub(Log.floor(Log.div(player.level.blue[3],5)),1),0),0.075)))), 1)), player.level.blue[3]));
-    if (player.bars.red.mouse == 1){
+    if (game.barsHeld){
         game.income.red = Log.div(Log.multi(Log.add(game.auto, Log.multi(game.click, 50)), game.IR), 256);
     }else{
         game.income.red = Log.div(Log.multi(game.auto, game.IR), 256);
@@ -1389,19 +1359,20 @@ function formatNum(player:InitPlayer, num:number|num|string, dp?:number, type?:"
     }
 }
 
-function unlockBlue(player:InitPlayer, domBindings:DomBindings) {
+function unlockBlue(game:Game, domBindings:DomBindings) {
+    const player = game.player
     if (Log.get(player.money.green,"n") as number >= 50) {
         player.money.green = Log.sub(player.money.green,50);
         player.unlock = true;
         domBindings.unlockBtn.classList.add("hidden");
-        document.getElementById("blueDiv")!.classList.remove("hidden");
+        game.domBindings.blueDiv.classList.remove("hidden");
     }
 }
 
 function exportSave(game:Game){
     let temp = document.createElement("textarea");
     temp.value = btoa(savePlayer(game.player));
-    document.getElementById("tabSettings")!.appendChild(temp);
+    game.domBindings.tabSettings.appendChild(temp);
     temp.select()
     document.execCommand("copy")//TODO: depricated method of putting stuff on clipboard, this is probably too much access to ask for?
     temp.parentNode!.removeChild(temp);
@@ -1504,21 +1475,23 @@ function reset(game:Game, type:number, force?:boolean) {
                 if (player.spectrumLevel[19] === 1) player.spectrum = Log.add(player.spectrum, Log.pow(player.advSpec.gain, 2));
                 else player.spectrum = Log.add(player.spectrum, player.advSpec.gain);
             }
-            if (player.specced == 0) document.getElementById("spectrumCountRGB")!.classList.remove("hidden");
+            if (player.specced == 0){
+                game.domBindings.spectrumCountRGB.classList.remove("hidden");
+            }
             pCheck(game, 16);
             for (var i = 0; i < 3; i++){
                 player.bars[PLAYER_MONEY_KEYS[i]].width = 0;
             }
             player.money = { red: 0, green: 0, blue: 0 };
             player.level = { red: 0, green: 0, blue: [0, 0, 0, 0] };
-            player.unlock = player.spectrumLevel[6] == 1;
+            player.unlock = player.spectrumLevel[6] === 1;
             player.spliced = { red: 0, green: 0, blue: 0 };
             player.spectrumTimer = 0;
             if (!player.unlock) {
                 game.domBindings.unlockBtn.classList.add("hidden");
-                document.getElementById("blueDiv")!.classList.add("hidden");
+                game.domBindings.blueDiv.classList.add("hidden");
             }
-            document.getElementById("spectrumDiv")!.classList.add("hidden");
+            game.domBindings.spectrumDiv.classList.add("hidden");
             player.CM = 1;
             updateStats(game);
             CalcSRgain(game);
@@ -1564,8 +1537,8 @@ function mix(game:Game, PC?:unknown) {
             if (PC) {
                 reset(game, 1, true);
                 player.spectrum = new num(0);
-                document.getElementById("blackCountRGB")!.classList.remove("hidden");
-                document.getElementById("newupgrades")!.classList.add("hidden");
+                game.domBindings.blackCountRGB.classList.remove("hidden");
+                game.domBindings.newupgrades.classList.add("hidden");
                 player.prism.active = true;
                 game.mixCost = 0;
             } else{
@@ -1780,7 +1753,7 @@ function setupKeyListeners(game:Game){
             game.p3 = false;
         }
         if (key >= 49 && key <= 52) {
-            while (buyUpgrade(game, "blue", key % 49)){
+            while (buyBlueUpgrade(game, key % 49)){
                 //TODO: this looks like a ui freezing hazard
             }
             game.p3 = false;
@@ -1793,7 +1766,7 @@ function setupKeyListeners(game:Game){
                 //TODO: this looks like a ui freezing hazard
             }
             for (var i = 0; i < 4; i++){
-                while (buyUpgrade(game, "blue", i)){
+                while (buyBlueUpgrade(game, i)){
                     //TODO: this looks like a ui freezing hazard
                 }
             }
@@ -1804,7 +1777,7 @@ function setupKeyListeners(game:Game){
     const keyDownHandler = function (event:KeyboardEvent) {
         var key = event.keyCode || event.which; //TODO this is depricated, also really hard to figure out which key is which
         if (key == 32) {
-            press(game, "red",1)
+            game.barsHeld = true
         }
         if (key == 65){
             ToggleAB(game, "all");
@@ -1814,7 +1787,7 @@ function setupKeyListeners(game:Game){
     const keyUpListener = function (event:KeyboardEvent) {
         var key = event.keyCode || event.which;//TODO this is depricated, also really hard to figure out which key is which
         if (key == 32) {
-            press(game, "red", 0)
+            game.barsHeld = false
         }
     }
     window.addEventListener("keyup", keyUpListener, false)
@@ -1910,7 +1883,7 @@ function simulateTime(game:Game, timeIn:number) {
         }
         if (player.AB.blue && player.spectrumLevel[9]){
             for (var i = 0; i < 4; i++){
-                while (buyUpgrade(game, "blue", i)){}
+                while (buyBlueUpgrade(game, i)){}
             }
         }
         updateStats(game);

@@ -105,3 +105,36 @@ const PlayerValidator:ObjectValidator<InitPlayer> = {
     bars:{red:isBar, green:isBar, blue:isBar}
 
 }
+
+function savePlayer(player:InitPlayer){
+    return JSON.stringify(player, function(_, value){
+        if(value instanceof num || value instanceof bar){
+            return value.toJSON()
+        }
+        if(value instanceof Game){
+            throw Error()
+        }
+        return value
+    })
+}
+function loadPlayer(data:string):InitPlayer{
+    const player = JSON.parse(data, function(key, value){
+        if(typeof value==="object" && Object.keys(value).length===2){//TODO not sure if this instanceof check is required or not
+            if(!(value instanceof num) && value.typ && typeof value.val==="number"){
+                return deserlNum(value)
+            }else if(!(value instanceof bar) && (typeof (value as barJSON).width==="number" || (value as barJSON).width instanceof num) && Array.isArray((value as barJSON).color) && (value as barJSON).color.length===3){
+                const v = value as barJSON
+                if(key==="red"||key==="green"||key==="blue"){
+                    const nb = new bar(key, v.color[0], v.color[1], v.color[2], key+"Bar")
+                    nb.width = v.width
+                    return nb
+                }
+            }
+        }
+        return value
+    })
+    if(!validate(player, PlayerValidator)){
+        throw Error("failure to load player")
+    }
+    return player
+}
