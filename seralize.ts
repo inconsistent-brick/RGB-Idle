@@ -119,7 +119,7 @@ function savePlayer(player:InitPlayer){
 }
 function loadPlayer(data:string):InitPlayer{
     const player = JSON.parse(data, function(key, value){
-        if(typeof value==="object" && Object.keys(value).length===2){//TODO not sure if this instanceof check is required or not
+        if(value!==null && typeof value==="object" && Object.keys(value).length===2){//TODO not sure if this instanceof check is required or not
             if(!(value instanceof num) && value.typ && typeof value.val==="number"){
                 return deserlNum(value)
             }else if(!(value instanceof bar) && (typeof (value as barJSON).width==="number" || (value as barJSON).width instanceof num) && Array.isArray((value as barJSON).color) && (value as barJSON).color.length===3){
@@ -133,6 +133,50 @@ function loadPlayer(data:string):InitPlayer{
         }
         return value
     })
+    if (player.version < 1.1) {
+        for (var i = 0; i < 3; i++){
+            player.spectrumLevel.push(-1);
+        }
+        player.AB = { red: true, green: true, blue: true };
+        player.CM = 1;
+        player.black = new num(0);
+        player.progress = [];
+        player.potencyEff = { red: 1 / 256, green: 1 / 256, blue: 1 / 256 };
+        player.prism = {
+            active: false,
+            potency :{red:-1, green:-1, blue:-1, total:0, points:0}, 
+            potencyEff: { red: 1 / 256, green: 1 / 256, blue: 1 / 256 },
+            specbar:{ red: false, green: false, blue: false },
+            cost: 0
+        };
+        while (player.spectrumLevel.length > 18){
+            player.spectrumLevel.splice(length - 1, 1);
+        }
+        player.advSpec = { unlock: false, multi: 1, max: 50, reduce: 0.1, time: 0, active: false, gain: 0, SR: 0 };
+    }
+    if (player.version < 1.11){
+        player.prism.cost = 0;
+    }
+    if (player.version < 1.12) {
+        player.sleepingTime = 0;
+        player.wastedTime = 0;
+        alert("RGB Idle has updated, hope you enjoy the new stuff! \n Current Version: "+v);
+    }
+    if(player.version<1.13){
+        if(!(player.black instanceof num)){
+            player.black = new num(player.black)
+        }
+        if(player.CM===null){
+            player.CM = 1
+        }
+        for(let c of ["red" as const, "green"  as const, "blue"  as const]){
+            if(!(player.bars[c] instanceof bar)){
+                const color = player.bars[c].color
+                player.bars[c] = new bar(c, color[0], color[1], color[2], c+"Bar")
+            }
+        }
+    }
+    player.version = v
     if(!validate(player, PlayerValidator)){
         throw Error("failure to load player")
     }

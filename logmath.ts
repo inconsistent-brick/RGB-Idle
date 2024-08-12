@@ -5,9 +5,7 @@ class num {
     typ:"num"|"log"
     constructor(input:number|num|string, force?:"log"|"num"){ //TODO: force="num" does nothing is that just the default?
         if(typeof input==="number"){
-            this.val = 0
             this.typ="num"
-    
             if (force === "log") {
                 if (input <= 308) {
                     this.typ = "num";
@@ -22,7 +20,7 @@ class num {
             }else{
                 throw Error("invalid num initialization")
             }
-        }else if(typeof input==="string"){    
+        }else if(typeof input==="string"){
             if(input.charAt(0).toLowerCase() === "e" && isFinite(parseFloat(input.replace(/e/i,"")))){
                 this.typ = "log";
                 this.val = parseFloat(input.replace(/e/i, ""));
@@ -60,7 +58,22 @@ class num {
             }
             return this.val>Math.log10(other.val)
         }
-        
+    }
+    gte(other:num|numSerl){
+        if(other.typ===this.typ){
+            return this.val>=other.val
+        }
+        if(this.typ==="num"){
+            if(this.val<=0){//logs cannot represent values <=0 currently and the other value is a log
+                return false
+            }
+            return Math.log10(this.val)>=other.val
+        }else{
+            if(other.val<=0){
+                return true
+            }
+            return this.val>=Math.log10(other.val)
+        }
     }
 
     div(other:num|number){

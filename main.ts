@@ -1,7 +1,8 @@
 //TODO errors should probably be really obvious and in people's face
 //TODO no more get.... bindings need to be explicit
 //Some data bindings. Things need to listen on other things. not get updated in some massive game loop.
-const v = 1.12;
+//TODO: reset player/player is 
+const v = 1.13;
 const BAR_KEYS:Array<"red"|"green"|"blue"> = ["red", "green", "blue"]
 const PLAYER_MONEY_KEYS:Array<"red"|"green"|"blue"> = BAR_KEYS
 
@@ -135,8 +136,8 @@ class bar{
 
 
 class Game{
-    p3 = true;
-    p10 = 0;
+    p3 = true; //no hotkeys or auto buyers been used this prism
+    p10 = 0; //streak of alternating between colored and black bars
     ABInt = {red:2000,green:2000,blue:2000};
     Cores:number|num = 1;
     Clock:number|num = 1;
@@ -156,7 +157,6 @@ class Game{
     BPD:number|num = 0;
     SR:num|0 = 0;
     SR5:num|0 = 0;
-    SpecPrice = [1, 1, 3, 5, 5, 7, 10, 30, 50, 75, 300, 500, 1500, 2500, 25000, 100000, 1e10, 1e13, 1e25, 1e35, 1e50];
     ABcount = 0 
 
     mixCost:number|undefined|num;
@@ -170,49 +170,20 @@ class Game{
     ABLoop:number
     autoSave:number
     barsHeld:boolean
+    wraper:GameWraper
     constructor(){
         this.barsHeld = false
         let player = {
             ...resetplayer,
             bars:{ red: new bar("red", 255, 0, 0, "redBar"), green: new bar("green", 0, 255, 0, "greenBar"), blue: new bar("blue", 0, 0, 255, "blueBar") }
         }
+        this.wraper = new GameWraper(this)
         player.bars.red.setup(this);
         let loadedSave = load();
         const domBindings = doBinds(this)
         this.domBindings = domBindings
-        if (loadedSave != false) {
-            if (loadedSave.version >= 1){
-                 player = Object.assign(player, loadedSave)
-            }
-            if (player.version < 1.1) {
-                for (var i = 0; i < 3; i++){
-                    player.spectrumLevel.push(-1);
-                }
-                player.AB = { red: true, green: true, blue: true };
-                player.CM = 1;
-                player.black = new num(0);
-                player.progress = [];
-                player.potencyEff = { red: 1 / 256, green: 1 / 256, blue: 1 / 256 };
-                player.prism = {
-                    active: false,
-                    potency :{red:-1, green:-1, blue:-1, total:0, points:0}, 
-                    potencyEff: { red: 1 / 256, green: 1 / 256, blue: 1 / 256 },
-                    specbar:{ red: false, green: false, blue: false },
-                    cost: 0
-                };
-                while (player.spectrumLevel.length > 18){
-                    player.spectrumLevel.splice(length - 1, 1);
-                }
-                player.advSpec = { unlock: false, multi: 1, max: 50, reduce: 0.1, time: 0, active: false, gain: 0, SR: 0 };
-            }
-            if (player.version < 1.11){
-                player.prism.cost = 0;
-            }
-            if (player.version < 1.12) {
-                player.sleepingTime = 0;
-                player.wastedTime = 0;
-                alert("RGB Idle has updated, hope you enjoy the new stuff! \n Current Version: 1.12");
-            }
+        if (loadedSave !== false) {
+            player = loadedSave
             while (player.spectrumLevel.length < 21){
                 player.spectrumLevel.push(-1);
             }
@@ -231,15 +202,15 @@ class Game{
                 this.domBindings.newupgrades.classList.add("hidden");
             }
             if (SumOf(player.spectrumLevel) >= 12) {
-                this.domBindings.spectrumUpgradesTable.rows[5].classList.remove("hidden");
+                this.domBindings.spectrumTable.row5.classList.remove("hidden");
                 this.domBindings.newupgrades.classList.add("hidden")
             } else {
-                this.domBindings.spectrumUpgradesTable.rows[5].classList.add("hidden");
+                this.domBindings.spectrumTable.row5.classList.add("hidden");
             }
             if (player.prism.cost > 0){
-                this.domBindings.spectrumUpgradesTable.rows[6].classList.remove("hidden");
+                this.domBindings.spectrumTable.row6.classList.remove("hidden");
             }else{
-                this.domBindings.spectrumUpgradesTable.rows[6].classList.add("hidden");
+                this.domBindings.spectrumTable.row6.classList.add("hidden");
             }
             if (player.prism.active){
                 this.domBindings.blackCountRGB.classList.remove("hidden");
@@ -260,12 +231,12 @@ class Game{
             this.player = player
             updateStats(this);
             CalcSRgain(this);
-            SUInfo((document.getElementById("spectrumButton4")!.childNodes[1] as HTMLElement), this, 4);
-            SUInfo((document.getElementById("spectrumButton5")!.childNodes[1] as HTMLElement), this, 5);
-            SUInfo((document.getElementById("spectrumButton9")!.childNodes[1] as HTMLElement), this, 9);
-            (document.getElementById("spectrumButton4")!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Red Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
-            (document.getElementById("spectrumButton5")!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Green Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
-            (document.getElementById("spectrumButton9")!.childNodes[0] as HTMLElement).innerHTML = "Auto Buy Max Blue Upgrades Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
+            for(let ab of this.wraper.autoBuyers){
+                ab.info()
+            }
+            domBindings.spectrumTable.divs[4].description.innerHTML = "Auto Buy Max Red Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
+            domBindings.spectrumTable.divs[5].description.innerHTML = "Auto Buy Max Green Level Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
+            domBindings.spectrumTable.divs[9].description.innerHTML = "Auto Buy Max Blue Upgrades Every " + formatNum(player, 2 / (player.progress.includes(4) ? 8 : 1)) + "s";
             this.ABInt = { red: 2000 / (player.progress.includes(4) ? 8 : 1), green: 2000 / (player.progress.includes(4) ? 8 : 1), blue: 2000 / (player.progress.includes(4) ? 8 : 1)};
             player.CM = Math.max(player.CM, 1);
             const dom = this.domBindings
@@ -302,7 +273,7 @@ class Game{
         }
         this.autoSave = setInterval(()=>save(this.player), 30000);
         this.mainLoop = setInterval(()=>this.gameLoop(), 1000 / player.options.fps);
-        this.ABLoop = setInterval(()=>this.autoBuyer(), 10);
+        this.ABLoop = setInterval(()=>this.wraper.runAutoBuyers(), 10);
         setupKeyListeners(this)
 
     }
@@ -311,30 +282,7 @@ class Game{
         clearInterval(this.ABLoop)
         clearInterval(this.autoSave)
     }
-    autoBuyer() {
-        this.ABcount += 10;
-        const player = this.player
-        if (player.AB.red || player.AB.green || player.AB.blue){
-            this.p3 = false;
-        }
-        if (player.spectrumLevel[4] == 1 && player.AB.red && this.ABcount% this.ABInt.red < 10){
-             while (buyUpgrade(this, "red")){
-                //TODO this do nothing is dangerious 
-             }
-        }
-        if (player.spectrumLevel[5] == 1 && player.AB.green && this.ABcount % this.ABInt.green < 10){
-             while (buyUpgrade(this, "green")){
-                //TODO this do nothing is dangerious 
-             }
-        }
-        if (player.spectrumLevel[9] == 1 && player.AB.blue && this.ABcount % this.ABInt.blue < 10){
-            for (var i = 0; i < 4; i++){
-                while (buyBlueUpgrade(this, i)){
-                    //TODO this do nothing is dangerious 
-                }
-            }
-        }
-    }
+
     gameLoop() {
         const player = this.player
         var dif = Date.now() - player.lastUpdate;
@@ -376,11 +324,12 @@ class Game{
         if (player.specced > 0) {
             document.getElementsByClassName("switch")[1].classList.remove("hidden");
             document.getElementsByClassName("switch")[3].classList.remove("hidden");
-            document.getElementById("tabSpectrum")!.children[1].classList.add("hidden");
-            document.getElementById("tabSpectrum")!.children[3].classList.remove("hidden");
+            
+            this.domBindings.tabSpectrumUnspeced.classList.add("hidden");
+            this.domBindings.tabSpectrumSpeced.classList.remove("hidden");
         }
         if (player.black.gt({val:128, typ:"log"}) && SumOf(player.spectrumLevel) === 9) {
-            (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[5].classList.remove("hidden");
+            this.domBindings.spectrumTable.row5.classList.remove("hidden");
             for (var i = 15; i < 18; i++){
                 player.spectrumLevel[i] = 0;
             }
@@ -569,21 +518,7 @@ const render = {
             game.domBindings.mixButton.innerHTML = "Activate the Prism and Embrace its Power!";
         }
     },
-    Upgrades : function(game:Game){
-        const player = game.player
-        for (let i = 0; i < player.spectrumLevel.length ; i++) {
-            if (i != 5 && i != 4 && i != 9){
-                SUInfo(document.getElementById("spectrumButton" + i)!.children[1], game, i);
-            }
-            document.getElementById("spectrumButton" + i)!.children[2].innerHTML = "Price: " + formatNum(player, game.SpecPrice[i], 0) + " Spectrum ";
-            if (player.spectrumLevel[i] === 1){
-                document.getElementById("spectrumButton" + i)!.classList.add("bought");
-            }
-            else {
-                document.getElementById("spectrumButton" + i)!.classList.remove("bought");
-            }
-        }
-    },
+    Upgrades : renderSpectrum,
     RGB : function (game:Game) {
         const player = game.player
         for (let i = 0; i < PLAYER_MONEY_KEYS.length; i++) {
@@ -691,10 +626,10 @@ const render = {
             }
         }
         if (player.progress.includes(16)){
-            game.domBindings.specstat.innerHTML = "Times specced is  currently " + formatNum(player, player.specced, 0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100, 2) +"x and your spectrum bar gain by " +formatNum(player, Math.sqrt(player.specced),2)+"x.";
+            game.domBindings.specstat.innerHTML = "Times specced is currently " + formatNum(player, player.specced, 0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100, 2) +"x and your spectrum bar gain by " +formatNum(player, Math.sqrt(player.specced),2)+"x.";
         }
         else{
-            game.domBindings.specstat.innerHTML = "Times specced is  currently " + formatNum(player, player.specced,0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100,2) + "x.";
+            game.domBindings.specstat.innerHTML = "Times specced is currently " + formatNum(player, player.specced,0) + ". This multiplies your spectrum gain by " + formatNum(player, 1 + player.specced / 100,2) + "x.";
         }
         let ret = "You have wasted " + formatTime(player.wastedTime + player.sleepingTime) + " playing this broken game.<br>"; //TODO replace broken with fixed eventually
         if (player.sleepingTime < 60000){
@@ -716,168 +651,12 @@ const render = {
         game.domBindings.timestat.innerHTML = ret;
     },
     Progress: function (game:Game) {
-        const player = game.player
-        const rows = game.domBindings.achieves.rows;
-        for (let i = 0; i < 14; i++){
-             rows[i].style.backgroundColor = "";
-        }
-        for (let i = 0; i < player.progress.length; i++){
-             rows[player.progress[i]-1].style.backgroundColor = "green";
+        for(let a of achievements){
+            a.draw(game)
         }
     },
 }
 
-function pCheck(game:Game, num:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17) {
-    const player = game.player
-    if (!player.prism.active){
-        return;
-    }
-    switch(num){
-        case 1:
-            if (player.prism.active && !player.progress.includes(1)) {
-                player.progress.push(1);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 2:
-            if (!player.progress.includes(2) && !player.advSpec.unlock) {
-                player.progress.push(2);
-                player.advSpec.unlock = true;
-                game.domBindings.advSpectrumReset.classList.remove("hidden");
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 3:
-            if (!player.progress.includes(3) && Log.get(player.black, "log") >= 50) {
-                player.progress.push(3);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 4:
-            if (game.p3 && Log.get(player.black,"l") >= 3 && !player.progress.includes(4)) {
-                player.progress.push(4);
-                document.getElementById("spectrumButton4")!.children[0].innerHTML = "Auto Buy Max Red Level Every " + 0.25 + "s";
-                document.getElementById("spectrumButton5")!.children[0].innerHTML = "Auto Buy Max Green Level Every " + 0.25 + "s";
-                document.getElementById("spectrumButton9")!.children[0].innerHTML = "Auto Buy Max Blue Upgrades Every " + 0.25 + "s";
-                game.ABInt = { red: 2000 / 8, green: 2000 / 8, blue: 2000 / 8 };
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 5:
-            if (Math.floor(Log.get(player.spliced.red, "l")) === 128 && Math.floor(Log.get(player.spliced.green, "l")) == 128 && Math.floor(Log.get(player.spliced.blue, "l")) == 128 && !player.progress.includes(5)) {
-                player.progress.push(5);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 6:
-            if (Log.get(player.money.blue, "l") >= 64 && player.level.blue[3] === 0 && !player.progress.includes(6)) {
-                player.progress.push(6);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 7:
-            if (!player.progress.includes(7)) {
-                player.progress.push(7);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 8:
-            if (player.bars.red.color[0] == 255 && player.bars.green.color[1] == 255 && player.bars.blue.color[2] == 255 && !player.progress.includes(8)) {
-                player.progress.push(8);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 9:
-            if (Log.get(Log.div(player.previousSpectrums[0].amount, (player.previousSpectrums[0].time / 1000)), "num") as number >= 1000000 && !player.progress.includes(9)) {
-                player.progress.push(9);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 10:
-            if (!player.progress.includes(10)) {
-                if (game.p10 === 9) {
-                    pop(game, game.domBindings.popupDivs.progressFinish);
-                    player.progress.push(10);
-                } else {
-                    let names = ["red","green","blue"];
-                    let pColor = [SumOf(player.bars.red.color),SumOf(player.bars.green.color),SumOf(player.bars.blue.color)];
-                    let nColor = [];
-                    for(let i = 0 ; i < 3; i++){
-                        const row = document.getElementById(names[i] + "Prism") as HTMLTableRowElement;
-                        let ret = [];
-                        for(let j = 0; j < 5; j+=2){
-                            ret.push(Math.floor(parseFloat((row.cells[2].childNodes[j] as HTMLInputElement).value)))
-                        }
-                        nColor.push(SumOf(ret));
-                    }
-                    if (
-                        (nColor.every(function (val) { return val === 0 }) && pColor.every(function (val) { return val > 0 })) ||
-                        (pColor.every(function (val) { return val === 0 }) && nColor.every(function (val) { return val > 0 }))
-                    ){
-                        game.p10++;
-                    }
-                    else{
-                        game.p10 = 0;
-                    }
-                }
-            }
-            return
-        case 11:
-            if (!player.progress.includes(11)) {
-                let b:num|number = 0;
-                let w:num|number = 0;
-                for (var i = 0; i < BAR_KEYS.length; i++) {
-                    if (player.specbar[BAR_KEYS[i]]) {
-                        w = Log.add(w, displayIncome(game, BAR_KEYS[i],"spectrum"));
-                    }
-                }
-                for (var i = 0; i < BAR_KEYS.length; i++) {
-                    if (SumOf(player.bars[BAR_KEYS[i]].color) === 0) b = Log.add(b, displayIncome(game, BAR_KEYS[i], "black"));
-                    if (player.bars[BAR_KEYS[i]].color.filter(function (item) { return item === 0 }).length == 2 && player.progress.includes(8)) b = Log.add(displayIncome(game, BAR_KEYS[i], "miniBlack"), b);
-                }
-                if (Log.get(w, "l") > Log.get(b, "l")) {
-                    player.progress.push(11);
-                    pop(game, game.domBindings.popupDivs.progressFinish);
-                }
-            }
-            return
-        case 12:
-            if (!player.progress.includes(12) && Log.get(player.money.green, "n") === 0 && player.level.green === 0 && player.level.red >= 1000) {
-                player.progress.push(12);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 13:
-            if (!player.progress.includes(13) && Log.get(player.black, "l") >= 256) {
-                player.progress.push(13);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 14:
-            if (!player.progress.includes(14) && player.specbar.red && player.specbar.green && player.specbar.blue) {
-                player.progress.push(14);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 15:
-            if (!player.progress.includes(15) && player.prism.cost > 0) {
-                player.progress.push(15);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 16:
-            if (!player.progress.includes(16) && player.specced >= 10000) {
-                player.progress.push(16);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-            return
-        case 17:
-            if (!player.progress.includes(17) && player.advSpec.time >= 3.6e6) {
-                player.progress.push(17);
-                pop(game, game.domBindings.popupDivs.progressFinish);
-            }
-    }          
-}
 
 function increase(game:Game, amnt:num|number, dif:num|number) {
     const player = game.player
@@ -971,7 +750,7 @@ function prismUpgrade(game:Game, type:"cost"|"specbar"|"potency"|"add"|"sub", na
 
                 pCheck(game, 15);
                 if (player.prism.cost === 1) {
-                    (document.getElementById("spectrumButton0")!.parentElement!.parentElement!.parentElement as HTMLTableElement).rows[6].classList.remove("hidden");
+                    game.domBindings.spectrumTable.row6.classList.remove("hidden");
                     for (var i = 18; i < 21; i++){
                         player.spectrumLevel[i] = 0;
                     }
@@ -1033,15 +812,15 @@ function prismUpgrade(game:Game, type:"cost"|"specbar"|"potency"|"add"|"sub", na
 
 function buySpectrumUpgrade(game:Game, Bindex:number) {
     const player = game.player
-    if (Log.get(player.spectrum,"log") as number >= Math.log10(game.SpecPrice[Bindex]) && player.spectrumLevel[Bindex] < 1) {
+    if (Log.get(player.spectrum,"log") as number >= Math.log10(spectrumUpgrades[Bindex].price) && player.spectrumLevel[Bindex] < 1) {
         if(Bindex === 6) {
             player.unlock = true;
             game.domBindings.blueDiv.classList.remove("hidden");
         }
         if (Bindex === 5 || Bindex === 4 || Bindex === 9) {
-            SUInfo((document.getElementById("spectrumButton" + Bindex)!.childNodes[1] as HTMLElement), game, Bindex);
+            game.wraper.autoBuyers[{4:0,5:1,9:2}[Bindex]].info()
         }
-        player.spectrum = Log.sub(player.spectrum, game.SpecPrice[Bindex]);
+        player.spectrum = Log.sub(player.spectrum, spectrumUpgrades[Bindex].price);
         player.spectrumLevel[Bindex]++;
         updateStats(game);
         return true;
@@ -1084,79 +863,6 @@ function buyUpgrade(game:Game, name:"red"|"green") {
 
 }
 
-function SUABInfo(element:Element, game:Game, color:"red"|"green"|"blue"){
-    const player = game.player
-    element.innerHTML = ""
-    const div = document.createElement("div")
-    div.onclick = function(){
-        ToggleAB(game, color)
-    }
-    div.className="button"
-    div.style.height = "100%"
-    div.style.width="50%"
-    div.style.backgroundColor = (player.AB[color] ? "green" : "red")
-    div.textContent = player.AB[color] ? "On" : "Off"
-    element.appendChild(div)
-    return                 
-
-
-}
-//I think this stands for spectrum upgrade info
-function SUInfo(element:Element, game:Game, num:number):void{ //TODO this ONLY consists of a switch statement
-    const player = game.player
-    switch(num){
-        case 0:
-            element.innerHTML = "Current CM: " + Math.max(Math.log10(player.CM), 1).toFixed(1) + "x";
-            return
-        case 2:
-            element.innerHTML =  "Base Bar Increase: " + (2 + player.spectrumLevel[2] * 2) + "/256";
-            return
-        case 4:
-            if(player.spectrumLevel[4] == 1){
-                SUABInfo(element, game, "red")
-                return                 
-            }
-            element.innerHTML =  "Buy Red Yourself!";
-            return
-        case 5:
-            if(player.spectrumLevel[5] == 1){
-                SUABInfo(element, game, "green")
-                return 
-            }
-            element.innerHTML = "Buy Green Yourself!";
-            return
-        case 7:
-            element.innerHTML = "Current Multi per 10: " + (player.spectrumLevel[7] + 1) + "x";
-            return
-        case 8:
-            element.innerHTML = "Current Multi per 10: " + (1.15 + player.spectrumLevel[8] * 0.15).toFixed(2-player.spectrumLevel[8]) + "x";
-            return
-        case 9:
-            if(player.spectrumLevel[9] == 1){
-                SUABInfo(element, game, "blue")
-            }
-            element.innerHTML = "Buy Blue Yourself!";
-            return
-        case 10:
-            element.innerHTML = "R&G cost " + ((1 - game.PD) * 100) + "% less";
-            return
-        case 11:
-            element.innerHTML = "Current Multi: " + formatNum(player, player.level.red,0) + "x";
-            return
-        case 12:
-            element.innerHTML = "Current Multi: " + formatNum(player, Log.max(Log.floor(player.spectrum),1), 0) + "x";
-            return
-        case 14:
-            element.innerHTML = "Base Core Count: " + (player.spectrumLevel[14] == 1 ? 8 : 1);
-            return
-        case 16:
-            element.innerHTML = "Increase Blue: ~" + formatNum(player, Log.round(Log.div(game.IB,256)));
-            return
-        default:
-            element.innerHTML = "";
-            return
-    }
-}
 
 function updateStats(game:Game) { //TODO ew wire this in a sane manner All of these are chached derived values
     const player = game.player
@@ -1412,23 +1118,23 @@ function loadImport(){
 }
 
 function load() {
-    if (localStorage.getItem("RGBsave") !== null) {
-        const saveValue = localStorage.getItem("RGBsave")
-        let temp = loadPlayer(saveValue?atob(saveValue):"null");
-        let names = ["red" as const,"green"  as const ,"blue"  as const];
-        for (let i = 0; i < 3; i++){
-            let barWidth = temp.bars[names[i]].width
-            if (typeof barWidth==="number" && isNaN(barWidth)) {
-                console.log(temp.bars[names[i]].width)
-                temp.bars[names[i]].width = 0;
-            } else {
-                temp.bars[names[i]].width = temp.bars[names[i]].width;
-            }
-        }
-        return temp;
-    } else{
-        return false;
+    const saveValue = localStorage.getItem("RGBsave")
+    if(saveValue===null){
+        return false
     }
+    let temp = loadPlayer(saveValue?atob(saveValue):"null");
+    let names = ["red" as const,"green"  as const ,"blue"  as const];
+    for (let i = 0; i < 3; i++){
+        let barWidth = temp.bars[names[i]].width
+        if (typeof barWidth==="number" && isNaN(barWidth)) {
+            console.log(temp.bars[names[i]].width)
+            temp.bars[names[i]].width = 0;
+        } else {
+            temp.bars[names[i]].width = temp.bars[names[i]].width;
+        }
+    }
+    return temp;
+    
 }
 
 function reset(game:Game, type:number, force?:boolean) {
@@ -1452,8 +1158,17 @@ function reset(game:Game, type:number, force?:boolean) {
                         player.advSpec.multi = 1;
                         if (player.spectrumLevel[19] === 1) player.spectrum = Log.add(player.spectrum, player.advSpec.gain);
                         else player.spectrum = Log.add(player.spectrum, player.advSpec.gain);
-                    if (!force) player.previousSpectrums = [{ time: player.spectrumTimer, amount: player.advSpec.gain }, player.previousSpectrums[0], player.previousSpectrums[1], player.previousSpectrums[2], player.previousSpectrums[3]];
-                }else return
+                        if (!force){
+                            player.previousSpectrums = [
+                                { time: player.spectrumTimer, amount: player.advSpec.gain },
+                                player.previousSpectrums[0],
+                                player.previousSpectrums[1],
+                                player.previousSpectrums[2],
+                                player.previousSpectrums[3]
+                            ];
+                        }
+                    }
+                    return
                 } else {
                     player.advSpec.SR = game.SR;
                     player.advSpec.time = player.spectrumTimer * (player.advSpec.multi + 1);
@@ -1614,7 +1329,7 @@ function mix(game:Game, PC?:unknown) {
             }
             pCheck(game, 14);
             pCheck(game, 8);
-        }
+    }
 }
 
 
@@ -1661,8 +1376,11 @@ function spliceColor(game:Game, name:"red"|"green"|"blue") {
         return;
     }
     player.spliced[name] = Log.add(player.spliced[name], Log.multi(player.money[name], player.level.blue[3] / 10));
-    if (player.level.blue[3] >= 10) player.money[name] = 0;
-    else player.money[name] =Log.sub(player.money[name],Log.multi(player.money[name], Math.min(player.level.blue[3] / 10, 1)));
+    if (player.level.blue[3] >= 10){
+         player.money[name] = 0;
+    }else{
+         player.money[name] = Log.sub(player.money[name],Log.multi(player.money[name], Math.min(player.level.blue[3] / 10, 1)));
+    }
     if (Log.lt(player.spliced[name], 0)){
         player.spliced[name] = 0;
     }
@@ -1674,19 +1392,7 @@ function SumOf(arr:Array<number>) {
     return arr.reduce((acc, num) => acc + num);
 }
 
-function ToggleAB(game:Game, name:"all"|"red"|"green"|"blue"){//toggles auto buyers
-    const player = game.player
-    if (name == "all") {
-        player.AB.red = !player.AB.red;
-        player.AB.green = !player.AB.green;
-        player.AB.blue = !player.AB.blue;
-    } else{
-        player.AB[name] = !player.AB[name];
-    }
-    SUInfo((document.getElementById("spectrumButton" + 4)!.childNodes[1] as HTMLElement), game, 4);
-    SUInfo((document.getElementById("spectrumButton" + 5)!.childNodes[1] as HTMLElement), game, 5);
-    SUInfo((document.getElementById("spectrumButton" + 9)!.childNodes[1] as HTMLElement), game, 9);
-}
+
 
 function pop(game:Game, div:HTMLElement) {
     div.style.visibility = "visible";
@@ -1780,7 +1486,9 @@ function setupKeyListeners(game:Game){
             game.barsHeld = true
         }
         if (key == 65){
-            ToggleAB(game, "all");
+            for(let ab of game.wraper.autoBuyers){
+                ab.toggle()
+            }
         }
     }
     window.addEventListener("keydown", keyDownHandler, false)
@@ -1871,6 +1579,8 @@ function simulateTime(game:Game, timeIn:number) {
             player.spectrum = Log.add(player.spectrum, Log.div(Log.multi(prod.spec, Log.min(nextUp, time)), 1000));
             time = Log.sub(time,Log.min(nextUp, time));
         }
+
+
         if(player.AB.red && player.spectrumLevel[4]){
             while (buyUpgrade(game, "red")){
                 //TODO this loop looks like it could cause the ui to freeze
@@ -1949,7 +1659,7 @@ function getBlack(game:Game, name:"red"|"green"|"blue", time:number|num, prod:nu
     let mults;
     if(player.spectrumLevel[18] === 1) {
         mults = Log.max(Log.multi(Log.multi(Log.multi(prod, Log.pow(player.potencyEff[name],Log.add(1,Log.floor(Log.div(Log.log(player.potencyEff[name],256),7))))), (player.spectrumLevel[1] + 1)), (player.progress.includes(3) ? game.Cores : 1)), 0);
-    }else{ 
+    }else{
         mults = Log.max(Log.multi(Log.multi(Log.multi(prod, player.potencyEff[name]), (player.spectrumLevel[1] + 1)), (player.progress.includes(3) ? game.Cores : 1)), 0);
     }
     let blackThreshold = 1e100;

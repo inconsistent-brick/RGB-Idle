@@ -29,6 +29,61 @@ function getRangeInput(id:string):HTMLInputElement{
 function getTable(id:string){
     return getElementWithTag(id, "TBODY") as HTMLTableSectionElement
 }
+
+
+function spectrumTable(game:Game){
+    const target = document.getElementById("spectrumUpgradesTable")
+    
+    if(target===null){
+        throw Error("cant find spectrum upgrades table")
+    }
+    target.innerHTML = "" //TODO fixme when I finally release this just remove the thing from the dom instead
+    let nextRow = document.createElement("tr")
+    const rows:Array<HTMLTableRowElement> = []
+    const divs:Array<{description:HTMLDivElement, info:HTMLDivElement, price:HTMLDivElement, rowDiv:HTMLDivElement}> = []
+    for(let index=0; index<spectrumUpgrades.length; index++){
+        if(index%3==0){
+            nextRow = document.createElement("tr")
+            if(index>=15){
+                nextRow.className="hidden"
+            }
+            target.appendChild(nextRow)
+            rows.push(nextRow)
+        }
+        const td = document.createElement("td")
+        
+        const rowDiv = document.createElement("div")
+        rowDiv.onclick = function(){
+            buySpectrumUpgrade(game, index)
+        }
+        const description = document.createElement("div")
+        const info = document.createElement("div")
+        const price = document.createElement("div")
+        description.textContent = spectrumUpgrades[index].description
+        info.textContent = ""
+        price.textContent = "Price 5 Spectrum"
+        rowDiv.appendChild(description)
+        rowDiv.appendChild(info)
+        divs.push({
+            description,
+            info: info,
+            price,
+            rowDiv
+        })
+        rowDiv.appendChild(price)
+        rowDiv.className = "button spec"
+        td.appendChild(rowDiv)
+        nextRow.appendChild(td)
+        
+    }
+    return {
+        row5:rows[5],
+        row6:rows[6],
+        divs
+    }
+}
+
+
 function doBinds(game:Game){
     getDiv("rgbSwitchTab").onclick= function(){
         switchTab(game, "RGB", 0)
@@ -83,11 +138,7 @@ function doBinds(game:Game){
         spliceColor(game, "blue")
     }
     
-    for(let i=0; i<21; i++){
-        getDiv("spectrumButton"+i).onclick = function(){
-            buySpectrumUpgrade(game, i)
-        }
-    }
+
     getDiv("subtabUpgrades").onclick=function(){
         switchTab(game, "Upgrades", 0, "spectrum")
     }
@@ -133,7 +184,13 @@ function doBinds(game:Game){
         specstat:getDiv("specstat"),
         timestat:getDiv("timestat"),
         achieves:getTable("achieves"),
-        spectrumUpgradesTable:getTable("spectrumUpgradesTable")
+        spectrumTable:spectrumTable(game),
+        tabSpectrumUnspeced:getDiv("tabSpectrumUnspeced"),
+        tabSpectrumSpeced:getDiv("tabSpectrumSpeced")
+    }
+    const acheivementTable = getTable("achieves")
+    for (let a of achievements){
+        a.mount(acheivementTable)
     }
     returns.unlockBtn.onclick=function(){
         unlockBlue(game, game.domBindings)
